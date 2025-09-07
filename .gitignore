@@ -2,6 +2,14 @@
 node_modules/
 npm-debug.log*
 
+# Cursor - exclude everything except work-items and rule
+.cursor/*
+!.cursor/work-items/
+!.cursor/rules/
+
+# Work items
+work-items/
+
 # Environment variables
 .env
 .env.local
