@@ -1,4 +1,4 @@
-import { getAbandonedCheckouts, debugEnvVars } from './shopify_client.js';
+import { getAbandonedCheckouts, debugEnvVars } from '../src/shopify_client.js';
 
 /**
  * A map of all available tools that the MCP server can execute.

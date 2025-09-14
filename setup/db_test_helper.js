@@ -1,4 +1,4 @@
-import { addSentOffer, checkIfOfferSentRecently, initializeDatabase } from '../web/database.js';
+import { addSentOffer, checkIfOfferSentRecently, initializeDatabase } from '../db/database.js';
 
 async function runDbTest() {
   const testCheckoutId = `gid://shopify/Checkout/test${Date.now()}`;

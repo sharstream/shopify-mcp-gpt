@@ -5,6 +5,7 @@
 #
 # This script tests the core functionalities of the Shopify MCP application,
 # including database operations and direct Shopify API communication.
+# It sources credentials from a .env file in the project root.
 # ==============================================================================
 
 # --- Configuration ---
@@ -21,21 +22,23 @@ print_header() {
 
 # --- Main Script ---
 
-print_header "Step 1: Gathering Credentials"
+print_header "Step 1: Loading Credentials from .env file"
 
-# Prompt for Shopify credentials
-read -p "Enter your Shopify store domain (e.g., mcp-store-3224.myshopify.com): " SHOPIFY_STORE_DOMAIN
-read -sp "Enter your Shopify Admin API Access Token (shpat_...): " SHOPIFY_ADMIN_ACCESS_TOKEN
-echo ""
-
-if [[ -z "$SHOPIFY_STORE_DOMAIN" || -z "$SHOPIFY_ADMIN_ACCESS_TOKEN" ]]; then
-  echo "❌ Error: Both store domain and access token are required. Exiting."
+# Check if .env file exists
+if [ ! -f .env ]; then
+  echo "❌ Error: .env file not found. Please create one with SHOPIFY_STORE_DOMAIN and SHOPIFY_ADMIN_ACCESS_TOKEN. Exiting."
   exit 1
 fi
 
-# Export for use in sub-processes
-export SHOPIFY_STORE_DOMAIN
-export SHOPIFY_ADMIN_ACCESS_TOKEN
+# Load environment variables from .env file
+export $(grep -v '^#' .env | xargs)
+
+if [[ -z "$SHOPIFY_STORE_DOMAIN" || -z "$SHOPIFY_ADMIN_ACCESS_TOKEN" ]]; then
+  echo "❌ Error: SHOPIFY_STORE_DOMAIN and/or SHOPIFY_ADMIN_ACCESS_TOKEN are not set in the .env file. Exiting."
+  exit 1
+fi
+
+echo "✅ Credentials loaded successfully for store: ${SHOPIFY_STORE_DOMAIN}"
 
 print_header "Step 2: Testing Database Logic"
 
@@ -44,7 +47,7 @@ echo "This will test table creation, adding a 'sent offer', and checking it."
 echo "---"
 
 # Run the node script to test DB functions
-node db_test_helper.js
+node setup/db_test_helper.js
 
 echo "---"
 echo "✅ Database logic test completed."
@@ -58,8 +61,8 @@ echo "---"
 # The GraphQL query, minified into one line
 GRAPHQL_QUERY="query GetAbandonedCheckouts(\$first: Int!) { abandonedCheckouts(first: \$first) { edges { node { id abandonedCheckoutUrl createdAt customer { firstName lastName } } } } }"
 
-# Use curl to make the API request
-curl "https://${SHOPIFY_STORE_DOMAIN}/admin/api/2025-07/graphql.json" \
+# Use curl to make the API request. Pipe to jq if available for pretty printing.
+API_RESPONSE=$(curl -s "https://${SHOPIFY_STORE_DOMAIN}/admin/api/2025-07/graphql.json" \
   -X POST \
   -H "Content-Type: application/json" \
   -H "X-Shopify-Access-Token: ${SHOPIFY_ADMIN_ACCESS_TOKEN}" \
@@ -71,6 +74,16 @@ curl "https://${SHOPIFY_STORE_DOMAIN}/admin/api/2025-07/graphql.json" \
   }
 }
 EOF
+)
+
+if command -v jq &> /dev/null; then
+  echo "${API_RESPONSE}" | jq
+else
+  echo "${API_RESPONSE}"
+  echo ""
+  echo "(Pro-tip: Install 'jq' for pretty-printed JSON output. e.g., 'brew install jq')"
+fi
+
 
 echo ""
 echo "---"
@@ -82,5 +95,5 @@ print_header "All Tests Completed Successfully!"
 echo ""
 echo "Next Steps:"
 echo "To run the main application server, execute the following command:"
-echo "SHOPIFY_STORE_DOMAIN=${SHOPIFY_STORE_DOMAIN} SHOPIFY_ACCESS_TOKEN=${SHOPIFY_ADMIN_ACCESS_TOKEN} node server.js"
+echo "SHOPIFY_STORE_DOMAIN=${SHOPIFY_STORE_DOMAIN} SHOPIFY_ACCESS_TOKEN=\"<masked>\" node src/server.js"
 echo ""
