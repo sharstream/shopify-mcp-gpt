@@ -1,5 +1,5 @@
 import fetch from 'node-fetch';
-import { checkIfOfferSentRecently } from './database.js';
+import { checkIfOfferSentRecently } from '../db/database.js';
 
 /**
  * The GraphQL query for fetching abandoned checkouts.
