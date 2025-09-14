@@ -1,42 +1,6 @@
 import fetch from 'node-fetch';
 import { checkIfOfferSentRecently } from '../db/database.js';
-
-/**
- * The GraphQL query for fetching abandoned checkouts.
- * We are requesting the last 10, sorted by creation date.
- */
-const GET_ABANDONED_CHECKOUTS_QUERY = `
-  query GetAbandonedCheckouts($first: Int!) {
-    abandonedCheckouts(first: $first) {
-      edges {
-        node {
-          id
-          abandonedCheckoutUrl
-          createdAt
-          totalPriceSet {
-            shopMoney {
-              amount
-              currencyCode
-            }
-          }
-          customer {
-            firstName
-            lastName
-            verifiedEmail
-          }
-          lineItems(first: 5) {
-            edges {
-              node {
-                title
-                quantity
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-`;
+import { loadQuery } from './graphql/loader.js';
 
 /**
  * Fetches data from the Shopify Admin API using a GraphQL query.
@@ -105,6 +69,7 @@ export async function getAbandonedCheckouts(limit = 10, daysAgo = 7) {
     first: limit * 2,
   };
 
+  const GET_ABANDONED_CHECKOUTS_QUERY = await loadQuery('getAbandonedCheckouts');
   const data = await fetchFromShopify(GET_ABANDONED_CHECKOUTS_QUERY, variables);
   
   let allCheckouts = data.abandonedCheckouts.edges.map(edge => ({
