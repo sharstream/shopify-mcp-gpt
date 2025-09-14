@@ -71,7 +71,6 @@ export async function handleMcpRequest(requestBody) {
     } else if (name === 'get_abandoned_checkouts') {
       result = await toolFunction(args?.limit, args?.days_ago);
     } else {
-      // Default: call with args
       result = await toolFunction(args);
     }
     

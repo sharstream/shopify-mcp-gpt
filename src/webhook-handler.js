@@ -150,11 +150,10 @@ class ShopifyWebhookHandler {
       });
 
     } catch (error) {
-      console.error('❌ Error processing webhook:', error);
-      res.status(500).json({ 
-        error: 'Internal server error',
-        webhookId 
-      });
+      let { eventType, data } = getWebhookFromHeaders(req.headers);
+      console.error(`---> An error occurred while processing webhooks for ${shop} with event type ${eventType}:`, error.message, data);
+      // It's important to still send a 200 OK to Shopify to prevent retries
+      res.status(200).json({ received: true, error: "Internal Server Error" });
     }
   }
 
@@ -323,6 +322,13 @@ class ShopifyWebhookHandler {
 
     return server;
   }
+}
+
+function getWebhookFromHeaders(headers){
+  const eventType = headers["x-shopify-topic"] || "";
+  const data = headers["x-shopify-shop-domain"] || "";
+
+  return {eventType, data};
 }
 
 // Run the server if this file is executed directly

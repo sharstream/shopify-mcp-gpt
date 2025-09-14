@@ -9,6 +9,8 @@ import {
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
 
+import { initializeDatabase } from './web/database.js';
+
 /**
  * MCP Server for Shopify Webhook Management
  * Allows ChatGPT to create, manage, and monitor Shopify webhooks
@@ -403,6 +405,13 @@ class ShopifyWebhookMCPServer {
   }
 
   async run() {
+    try {
+      await initializeDatabase();
+      console.log('Database initialized successfully.');
+    } catch (error) {
+      console.error('Failed to initialize database:', error);
+      process.exit(1); // Exit if DB initialization fails
+    }
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     console.error('Shopify Webhook MCP server running on stdio');

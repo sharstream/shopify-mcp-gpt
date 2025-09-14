@@ -1,4 +1,5 @@
 import fetch from 'node-fetch';
+import { checkIfOfferSentRecently } from './database.js';
 
 /**
  * The GraphQL query for fetching abandoned checkouts.
@@ -100,16 +101,13 @@ export function debugEnvVars() {
  * @returns {Promise<Array<object>>} A formatted list of abandoned checkouts.
  */
 export async function getAbandonedCheckouts(limit = 10, daysAgo = 7) {
-  // Note: The GraphQL abandonedCheckouts field doesn't support date filtering or sorting
-  // We'll get the most recent ones and filter client-side if needed
   const variables = {
-    first: limit
+    first: limit * 2,
   };
 
   const data = await fetchFromShopify(GET_ABANDONED_CHECKOUTS_QUERY, variables);
   
-  // Get all checkouts
-  let checkouts = data.abandonedCheckouts.edges.map(edge => ({
+  let allCheckouts = data.abandonedCheckouts.edges.map(edge => ({
     id: edge.node.id,
     abandonedCheckoutUrl: edge.node.abandonedCheckoutUrl,
     createdAt: edge.node.createdAt,
@@ -121,21 +119,27 @@ export async function getAbandonedCheckouts(limit = 10, daysAgo = 7) {
     lineItems: edge.node.lineItems.edges.map(itemEdge => itemEdge.node)
   }));
 
-  // Filter by date (client-side since GraphQL doesn't support it)
   const sinceDate = new Date();
   sinceDate.setDate(sinceDate.getDate() - daysAgo);
   
-  checkouts = checkouts.filter(checkout => {
+  let recentCheckouts = allCheckouts.filter(checkout => {
     const checkoutDate = new Date(checkout.createdAt);
     return checkoutDate >= sinceDate;
   });
 
-  // Sort by total price (highest first) as per requirements
-  checkouts.sort((a, b) => {
+  const uncontactedCheckouts = [];
+  for (const checkout of recentCheckouts) {
+    const alreadySent = await checkIfOfferSentRecently({ checkout_id: checkout.id });
+    if (!alreadySent) {
+      uncontactedCheckouts.push(checkout);
+    }
+  }
+
+  uncontactedCheckouts.sort((a, b) => {
     const totalA = parseFloat(a.totalPrice.amount || '0');
     const totalB = parseFloat(b.totalPrice.amount || '0');
     return totalB - totalA;
   });
 
-  return checkouts;
+  return uncontactedCheckouts.slice(0, limit);
 }
