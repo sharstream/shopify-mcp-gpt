@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import 'dotenv/config';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -9,13 +10,14 @@ import {
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
 
-import { initializeDatabase } from './web/database.js';
+import { initializeDatabase } from './db/database.js';
+import { fetchFromShopify } from './src/shopify_client.js';
+import app from './src/api/index.js';
 
 /**
  * MCP Server for Shopify Webhook Management
  * Allows ChatGPT to create, manage, and monitor Shopify webhooks
  */
-
 class ShopifyWebhookMCPServer {
   constructor() {
     this.server = new Server(
@@ -30,42 +32,7 @@ class ShopifyWebhookMCPServer {
       }
     );
 
-    this.shopifyDomain = process.env.SHOPIFY_STORE_DOMAIN;
-    this.accessToken = process.env.SHOPIFY_ACCESS_TOKEN;
-
-    if (!this.shopifyDomain || !this.accessToken) {
-      throw new Error('SHOPIFY_STORE_DOMAIN and SHOPIFY_ACCESS_TOKEN environment variables are required');
-    }
-
     this.setupToolHandlers();
-  }
-
-  async makeShopifyRequest(query, variables = {}) {
-    const url = `https://${this.shopifyDomain}/admin/api/2025-07/graphql.json`;
-    
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Shopify-Access-Token': this.accessToken,
-      },
-      body: JSON.stringify({
-        query,
-        variables,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-    
-    if (data.errors) {
-      throw new Error(`GraphQL errors: ${JSON.stringify(data.errors)}`);
-    }
-
-    return data.data;
   }
 
   setupToolHandlers() {
@@ -234,7 +201,7 @@ class ShopifyWebhookMCPServer {
       }
     };
 
-    const data = await this.makeShopifyRequest(mutation, variables);
+    const data = await fetchFromShopify(mutation, variables);
     
     if (data.webhookSubscriptionCreate.userErrors.length > 0) {
       throw new Error(`Webhook creation failed: ${JSON.stringify(data.webhookSubscriptionCreate.userErrors)}`);
@@ -275,7 +242,7 @@ class ShopifyWebhookMCPServer {
       }
     `;
 
-    const data = await this.makeShopifyRequest(query, { first });
+    const data = await fetchFromShopify(query, { first });
     
     const subscriptions = data.webhookSubscriptions.edges.map(edge => edge.node);
 
@@ -304,7 +271,7 @@ class ShopifyWebhookMCPServer {
       }
     `;
 
-    const data = await this.makeShopifyRequest(mutation, { id: subscriptionId });
+    const data = await fetchFromShopify(mutation, { id: subscriptionId });
     
     if (data.webhookSubscriptionDelete.userErrors.length > 0) {
       throw new Error(`Webhook deletion failed: ${JSON.stringify(data.webhookSubscriptionDelete.userErrors)}`);
@@ -349,7 +316,7 @@ class ShopifyWebhookMCPServer {
       }
     };
 
-    const data = await this.makeShopifyRequest(mutation, variables);
+    const data = await fetchFromShopify(mutation, variables);
     
     if (data.pubSubWebhookSubscriptionCreate.userErrors.length > 0) {
       throw new Error(`Pub/Sub webhook creation failed: ${JSON.stringify(data.pubSubWebhookSubscriptionCreate.userErrors)}`);
@@ -412,6 +379,13 @@ class ShopifyWebhookMCPServer {
       console.error('Failed to initialize database:', error);
       process.exit(1); // Exit if DB initialization fails
     }
+
+    // Start the express server
+    const PORT = process.env.PORT || 3000;
+    app.listen(PORT, () => {
+      console.log(`Express server running on port ${PORT}`);
+    });
+    
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     console.error('Shopify Webhook MCP server running on stdio');

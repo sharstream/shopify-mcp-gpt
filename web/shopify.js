@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { BillingInterval, LATEST_API_VERSION } from "@shopify/shopify-api";
 import { shopifyApp } from "@shopify/shopify-app-express";
 import { SQLiteSessionStorage } from "@shopify/shopify-app-session-storage-sqlite";
@@ -18,6 +19,10 @@ const billingConfig = {
 
 const shopify = shopifyApp({
   api: {
+    apiKey: process.env.SHOPIFY_API_KEY,
+    apiSecretKey: process.env.SHOPIFY_API_SECRET,
+    scopes: (process.env.SCOPES || '').split(','),
+    hostName: (process.env.SHOPIFY_APP_URL || '').replace(/https?:\/\//, ""),
     apiVersion: LATEST_API_VERSION,
     restResources,
     future: {

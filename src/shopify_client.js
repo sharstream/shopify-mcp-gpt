@@ -10,7 +10,7 @@ import { loadQuery } from './graphql/loader.js';
  * @returns {Promise<object>} The JSON response from the Shopify API.
  * @throws {Error} If the API call fails.
  */
-async function fetchFromShopify(query, variables) {
+export async function fetchFromShopify(query, variables) {
   const storeDomain = process.env.SHOPIFY_STORE_DOMAIN;
   const accessToken = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN;
 

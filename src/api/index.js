@@ -8,7 +8,7 @@ import 'dotenv/config'; // Load .env file
 import shopify from "../../web/shopify.js";
 import productCreator from "../../web/product-creator.js";
 import PrivacyWebhookHandlers from "../../web/privacy.js";
-import { handleMcpRequest } from "../../web/mcp_handler.js"; // Import our MCP handler
+import { handleMcpRequest } from "../../tools/mcp_handler.js"; // Import our MCP handler
 
 const PORT = parseInt(
   process.env.BACKEND_PORT || process.env.PORT || "3000",
@@ -92,4 +92,4 @@ app.use("/*", shopify.ensureInstalledOnShop(), async (_req, res, _next) => {
     );
 });
 
-app.listen(PORT);
+export default app;
