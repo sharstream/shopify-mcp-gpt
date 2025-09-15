@@ -1,4 +1,4 @@
-import { getAbandonedCheckouts, debugEnvVars } from '../src/shopify_client.js';
+import { getAbandonedCheckouts, debugEnvVars, getProductCount, updateAbandonmentDeliveryStatus } from '../src/shopify_client.js';
 
 /**
  * A map of all available tools that the MCP server can execute.
@@ -7,6 +7,8 @@ import { getAbandonedCheckouts, debugEnvVars } from '../src/shopify_client.js';
 const TOOLS = {
   'get_abandoned_checkouts': getAbandonedCheckouts,
   'debug_env_vars': debugEnvVars,
+  'get_product_count': getProductCount,
+  'update_abandonment_delivery_status': updateAbandonmentDeliveryStatus,
 };
 
 /**

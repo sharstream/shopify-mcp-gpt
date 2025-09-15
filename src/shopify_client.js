@@ -108,3 +108,58 @@ export async function getAbandonedCheckouts(limit = 10, daysAgo = 7) {
 
   return uncontactedCheckouts.slice(0, limit);
 }
+
+/**
+ * Retrieves the total number of products in the Shopify store.
+ * @returns {Promise<number>} The total count of products.
+ */
+export async function getProductCount() {
+  const query = `
+    query {
+      productsCount {
+        count
+      }
+    }
+  `;
+
+  const data = await fetchFromShopify(query);
+  return data.productsCount.count;
+}
+
+/**
+ * Updates the delivery status of a marketing activity for a specific abandonment.
+ * @param {object} args The arguments for the mutation.
+ * @param {string} args.abandonmentId The ID of the abandonment.
+ * @param {string} args.marketingActivityId The ID of the marketing activity.
+ * @param {string} args.deliveryStatus The delivery status (e.g., 'SENT', 'NOT_SENT').
+ * @param {string} [args.deliveredAt] The ISO 8601 timestamp when the delivery was executed.
+ * @param {string} [args.deliveryStatusChangeReason] The reason for the status change.
+ * @returns {Promise<object>} The result of the mutation.
+ */
+export async function updateAbandonmentDeliveryStatus(args) {
+  const {
+    abandonmentId,
+    marketingActivityId,
+    deliveryStatus,
+    deliveredAt,
+    deliveryStatusChangeReason,
+  } = args;
+
+  const UPDATE_STATUS_MUTATION = await loadQuery('abandonmentUpdateActivitiesDeliveryStatuses');
+  
+  const variables = {
+    abandonmentId,
+    marketingActivityId,
+    deliveryStatus,
+    deliveredAt,
+    deliveryStatusChangeReason,
+  };
+
+  const data = await fetchFromShopify(UPDATE_STATUS_MUTATION, variables);
+
+  if (data.abandonmentUpdateActivitiesDeliveryStatuses.userErrors.length > 0) {
+    throw new Error(`Failed to update delivery status: ${JSON.stringify(data.abandonmentUpdateActivitiesDeliveryStatuses.userErrors)}`);
+  }
+
+  return data.abandonmentUpdateActivitiesDeliveryStatuses.abandonment;
+}
