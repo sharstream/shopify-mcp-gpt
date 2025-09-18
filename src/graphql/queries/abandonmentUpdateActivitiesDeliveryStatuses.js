@@ -1,5 +1,5 @@
 export const ABANDONMENT_UPDATE_ACTIVITIES_DELIVERY_STATUSES_MUTATION = `
-mutation UpdateAbandonmentDeliveryStatus(
+mutation abandonmentUpdateActivitiesDeliveryStatuses(
   $abandonmentId: ID!
   $marketingActivityId: ID!
   $deliveryStatus: AbandonmentDeliveryState!

@@ -11,7 +11,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { initializeDatabase } from './db/database.js';
-import { fetchFromShopify } from './src/shopify_client.js';
+import { fetchFromShopify } from './src/clients/shopify.js';
 import app from './src/api/index.js';
 
 /**
