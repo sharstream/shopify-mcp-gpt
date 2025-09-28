@@ -1,401 +1,75 @@
 #!/usr/bin/env node
 
 import 'dotenv/config';
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import {
-  CallToolRequestSchema,
-  ErrorCode,
-  ListToolsRequestSchema,
-  McpError,
-} from '@modelcontextprotocol/sdk/types.js';
+import { createServer } from 'http';
 
-import { initializeDatabase } from './db/database.js';
-import { fetchFromShopify } from './src/shopify_client.js';
 import app from './src/api/index.js';
+import { initializeDatabase } from './db/database.js';
+import { ShopifyMcpServer } from './src/mcp/adapters/mcp_sdk_adapter.js';
+
+const PORT = parseInt(process.env.BACKEND_PORT || process.env.PORT || '3000', 10);
 
 /**
- * MCP Server for Shopify Webhook Management
- * Allows ChatGPT to create, manage, and monitor Shopify webhooks
+ * Initialize the database and start servers based on mode
  */
-class ShopifyWebhookMCPServer {
-  constructor() {
-    this.server = new Server(
-      {
-        name: 'shopify-webhook-mcp',
-        version: '1.0.0',
-      },
-      {
-        capabilities: {
-          tools: {},
-        },
-      }
-    );
-
-    this.setupToolHandlers();
-  }
-
-  setupToolHandlers() {
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: [
-        {
-          name: 'create_webhook_subscription',
-          description: 'Create a new webhook subscription for a specific topic',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              topic: {
-                type: 'string',
-                description: 'Webhook topic (e.g., ORDERS_CREATE, PRODUCTS_UPDATE)',
-                enum: [
-                  'ORDERS_CREATE', 'ORDERS_UPDATE', 'ORDERS_DELETE', 'ORDERS_PAID',
-                  'PRODUCTS_CREATE', 'PRODUCTS_UPDATE', 'PRODUCTS_DELETE',
-                  'CUSTOMERS_CREATE', 'CUSTOMERS_UPDATE', 'CUSTOMERS_DELETE',
-                  'APP_UNINSTALLED', 'APP_SUBSCRIPTIONS_UPDATE'
-                ]
-              },
-              callbackUrl: {
-                type: 'string',
-                description: 'HTTPS URL where webhooks will be sent'
-              },
-              format: {
-                type: 'string',
-                description: 'Response format',
-                enum: ['JSON', 'XML'],
-                default: 'JSON'
-              },
-              includeFields: {
-                type: 'array',
-                items: { type: 'string' },
-                description: 'Specific fields to include in webhook payload'
-              }
-            },
-            required: ['topic', 'callbackUrl']
-          }
-        },
-        {
-          name: 'list_webhook_subscriptions',
-          description: 'List all current webhook subscriptions',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              first: {
-                type: 'number',
-                description: 'Number of subscriptions to retrieve (max 250)',
-                default: 10
-              }
-            }
-          }
-        },
-        {
-          name: 'delete_webhook_subscription',
-          description: 'Delete a webhook subscription by ID',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              subscriptionId: {
-                type: 'string',
-                description: 'The ID of the webhook subscription to delete'
-              }
-            },
-            required: ['subscriptionId']
-          }
-        },
-        {
-          name: 'create_pubsub_webhook',
-          description: 'Create a Google Cloud Pub/Sub webhook subscription',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              topic: {
-                type: 'string',
-                description: 'Webhook topic'
-              },
-              pubSubProject: {
-                type: 'string',
-                description: 'Google Cloud Project ID'
-              },
-              pubSubTopic: {
-                type: 'string',
-                description: 'Pub/Sub topic name'
-              }
-            },
-            required: ['topic', 'pubSubProject', 'pubSubTopic']
-          }
-        },
-        {
-          name: 'validate_webhook_endpoint',
-          description: 'Test if a webhook endpoint is reachable and valid',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              url: {
-                type: 'string',
-                description: 'The webhook endpoint URL to validate'
-              }
-            },
-            required: ['url']
-          }
-        }
-      ]
-    }));
-
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      const { name, arguments: args } = request.params;
-
-      try {
-        switch (name) {
-          case 'create_webhook_subscription':
-            return await this.createWebhookSubscription(args);
-          
-          case 'list_webhook_subscriptions':
-            return await this.listWebhookSubscriptions(args);
-          
-          case 'delete_webhook_subscription':
-            return await this.deleteWebhookSubscription(args);
-          
-          case 'create_pubsub_webhook':
-            return await this.createPubSubWebhook(args);
-          
-          case 'validate_webhook_endpoint':
-            return await this.validateWebhookEndpoint(args);
-          
-          default:
-            throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
-        }
-      } catch (error) {
-        throw new McpError(ErrorCode.InternalError, `Error executing ${name}: ${error.message}`);
-      }
-    });
-  }
-
-  async createWebhookSubscription(args) {
-    const { topic, callbackUrl, format = 'JSON', includeFields } = args;
-
-    const mutation = `
-      mutation webhookSubscriptionCreate($topic: WebhookSubscriptionTopic!, $webhookSubscription: WebhookSubscriptionInput!) {
-        webhookSubscriptionCreate(topic: $topic, webhookSubscription: $webhookSubscription) {
-          userErrors {
-            field
-            message
-          }
-          webhookSubscription {
-            id
-            callbackUrl
-            topic
-            format
-            includeFields
-            createdAt
-            updatedAt
-          }
-        }
-      }
-    `;
-
-    const variables = {
-      topic,
-      webhookSubscription: {
-        callbackUrl,
-        format,
-        ...(includeFields && { includeFields })
-      }
-    };
-
-    const data = await fetchFromShopify(mutation, variables);
-    
-    if (data.webhookSubscriptionCreate.userErrors.length > 0) {
-      throw new Error(`Webhook creation failed: ${JSON.stringify(data.webhookSubscriptionCreate.userErrors)}`);
-    }
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Successfully created webhook subscription:\n${JSON.stringify(data.webhookSubscriptionCreate.webhookSubscription, null, 2)}`
-        }
-      ]
-    };
-  }
-
-  async listWebhookSubscriptions(args) {
-    const { first = 10 } = args;
-
-    const query = `
-      query webhookSubscriptions($first: Int!) {
-        webhookSubscriptions(first: $first) {
-          edges {
-            node {
-              id
-              callbackUrl
-              topic
-              format
-              includeFields
-              createdAt
-              updatedAt
-            }
-          }
-          pageInfo {
-            hasNextPage
-            endCursor
-          }
-        }
-      }
-    `;
-
-    const data = await fetchFromShopify(query, { first });
-    
-    const subscriptions = data.webhookSubscriptions.edges.map(edge => edge.node);
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Current webhook subscriptions (${subscriptions.length}):\n${JSON.stringify(subscriptions, null, 2)}`
-        }
-      ]
-    };
-  }
-
-  async deleteWebhookSubscription(args) {
-    const { subscriptionId } = args;
-
-    const mutation = `
-      mutation webhookSubscriptionDelete($id: ID!) {
-        webhookSubscriptionDelete(id: $id) {
-          userErrors {
-            field
-            message
-          }
-          deletedWebhookSubscriptionId
-        }
-      }
-    `;
-
-    const data = await fetchFromShopify(mutation, { id: subscriptionId });
-    
-    if (data.webhookSubscriptionDelete.userErrors.length > 0) {
-      throw new Error(`Webhook deletion failed: ${JSON.stringify(data.webhookSubscriptionDelete.userErrors)}`);
-    }
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Successfully deleted webhook subscription: ${data.webhookSubscriptionDelete.deletedWebhookSubscriptionId}`
-        }
-      ]
-    };
-  }
-
-  async createPubSubWebhook(args) {
-    const { topic, pubSubProject, pubSubTopic } = args;
-
-    const mutation = `
-      mutation pubSubWebhookSubscriptionCreate($topic: WebhookSubscriptionTopic!, $webhookSubscription: PubSubWebhookSubscriptionInput!) {
-        pubSubWebhookSubscriptionCreate(topic: $topic, webhookSubscription: $webhookSubscription) {
-          userErrors {
-            field
-            message
-          }
-          webhookSubscription {
-            id
-            callbackUrl
-            topic
-            format
-            createdAt
-          }
-        }
-      }
-    `;
-
-    const variables = {
-      topic,
-      webhookSubscription: {
-        pubSubProject,
-        pubSubTopic
-      }
-    };
-
-    const data = await fetchFromShopify(mutation, variables);
-    
-    if (data.pubSubWebhookSubscriptionCreate.userErrors.length > 0) {
-      throw new Error(`Pub/Sub webhook creation failed: ${JSON.stringify(data.pubSubWebhookSubscriptionCreate.userErrors)}`);
-    }
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Successfully created Pub/Sub webhook subscription:\n${JSON.stringify(data.pubSubWebhookSubscriptionCreate.webhookSubscription, null, 2)}`
-        }
-      ]
-    };
-  }
-
-  async validateWebhookEndpoint(args) {
-    const { url } = args;
-
+async function startServers() {
     try {
-      // Test if the endpoint is reachable
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-      
-      const response = await fetch(url, {
-        method: 'HEAD',
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
+        // Initialize database first
+        await initializeDatabase();
+        console.log('Database initialized successfully.');
 
-      const isValid = response.ok;
-      const status = response.status;
-      const headers = Object.fromEntries(response.headers.entries());
+        // Check if we should run in MCP mode (stdio)
+        const isMcpMode = process.env.MCP_MODE === 'true' || process.argv.includes('--mcp');
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Webhook endpoint validation:\nURL: ${url}\nStatus: ${status}\nValid: ${isValid}\nHeaders: ${JSON.stringify(headers, null, 2)}`
-          }
-        ]
-      };
+        if (isMcpMode) {
+            console.log('🔗 Starting Unified Shopify MCP Server (stdio mode)...');
+            const mcpServer = new ShopifyMcpServer();
+            await mcpServer.runMcpServer();
+            return; // Don't start HTTP server in MCP mode
+        }
+
+        // Start HTTP server (development/hybrid mode)
+        console.log('🚀 Starting Express HTTP server with Unified MCP...');
+        const server = createServer(app);
+
+        server.listen(PORT, () => {
+            console.log(`Express server running on port ${PORT}`);
+            console.log(`📊 API Endpoints:`);
+            console.log(`   - POST /api/mcp (Unified MCP tools via HTTP)`);
+            console.log(`   - GET  /api/products/count`);
+            console.log(`   - POST /api/products`);
+            console.log(`💬 MCP Server: Unified architecture active`);
+            console.log(`🏪 Shopify Integration: Active`);
+            console.log(`\n💡 To run in pure MCP mode: MCP_MODE=true node server.js`);
+        });
+
+        server.on('error', (error) => {
+            if (error.code === 'EADDRINUSE') {
+                console.error(`❌ Port ${PORT} is already in use`);
+                process.exit(1);
+            }
+            console.error('❌ Server error:', error);
+        });
+
+        // Graceful shutdown
+        process.on('SIGINT', () => {
+            console.log('\n🛑 Gracefully shutting down...');
+            server.close(() => {
+                console.log('✅ Server closed');
+                process.exit(0);
+            });
+        });
+
     } catch (error) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Webhook endpoint validation failed:\nURL: ${url}\nError: ${error.message}`
-          }
-        ]
-      };
+        console.error('❌ Failed to start servers:', error);
+        process.exit(1);
     }
-  }
-
-  async run() {
-    try {
-      await initializeDatabase();
-      console.log('Database initialized successfully.');
-    } catch (error) {
-      console.error('Failed to initialize database:', error);
-      process.exit(1); // Exit if DB initialization fails
-    }
-
-    // Start the express server
-    const PORT = process.env.PORT || 3000;
-    app.listen(PORT, () => {
-      console.log(`Express server running on port ${PORT}`);
-    });
-    
-    const transport = new StdioServerTransport();
-    await this.server.connect(transport);
-    console.error('Shopify Webhook MCP server running on stdio');
-  }
 }
 
-// Only run if this file is executed directly
+// Export the server class for use in other modules (legacy compatibility)
+export { ShopifyMcpServer };
+
+// Run the server if this file is executed directly
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const server = new ShopifyWebhookMCPServer();
-  server.run().catch(console.error);
+    startServers();
 }
-
-export default ShopifyWebhookMCPServer;

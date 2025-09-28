@@ -1,0 +1,58 @@
+{
+  "mcpServers": {
+    "shopify-mcp": {
+      "command": "node",
+      "args": ["server.js"],
+      "cwd": "/Users/dperezalvarez/Documents/shopify-chatgpt-mcp",
+      "env": {
+        "NODE_ENV": "production",
+        "MCP_MODE": "true"
+      }
+    }
+  },
+  "server": {
+    "name": "Shopify MCP Server",
+    "version": "1.0.0",
+    "description": "Advanced MCP Server for Shopify integration with abandoned checkout recovery and marketing automation",
+    "capabilities": {
+      "tools": {
+        "get_abandoned_checkouts": {
+          "description": "Retrieve abandoned checkouts from Shopify",
+          "parameters": ["limit", "days_ago"]
+        },
+        "debug_env_vars": {
+          "description": "Debug environment variables configuration"
+        },
+        "get_product_count": {
+          "description": "Get total product count from Shopify store"
+        },
+        "update_abandonment_delivery_status": {
+          "description": "Update marketing activity delivery status for abandoned checkout",
+          "parameters": ["abandonmentId", "marketingActivityId", "deliveryStatus", "deliveredAt", "deliveryStatusChangeReason"]
+        },
+        "send_abandonment_recovery_offer": {
+          "description": "Send recovery offer for abandoned checkout",
+          "parameters": ["abandonmentId", "customerEmail", "customerId", "offerType", "discountPercent"]
+        },
+        "auto_process_abandonment_recovery": {
+          "description": "Automatically process abandoned checkout recovery",
+          "parameters": ["abandonmentId", "offerType", "discountPercent"]
+        }
+      }
+    }
+  },
+  "usage": {
+    "install": "npm install",
+    "start_http": "npm start",
+    "start_mcp": "npm run mcp-stdio",
+    "test": "npm test",
+    "development": "npm run dev"
+  },
+  "requirements": {
+    "node": ">=22.0.0",
+    "environment": [
+      "SHOPIFY_STORE_URL",
+      "SHOPIFY_ACCESS_TOKEN"
+    ]
+  }
+}

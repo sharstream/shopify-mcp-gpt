@@ -1,7 +1,7 @@
 {
   "name": "shopify-webhook-mcp-server",
   "version": "1.0.0",
-  "description": "MCP Server for managing Shopify webhooks via ChatGPT",
+  "description": "Advanced MCP Server for Shopify integration with abandoned checkout recovery and marketing automation using the official MCP SDK",
   "main": "server.js",
   "type": "module",
   "bin": {
@@ -10,9 +10,13 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
+    "mcp": "MCP_MODE=true node server.js",
+    "mcp-stdio": "MCP_MODE=true node server.js",
     "webhook": "node ./src/webhook-handler.js",
     "install-deps": "npm install",
-    "test": "vitest"
+    "test": "vitest",
+    "lint": "eslint --config eslint.config.js src/ server.js",
+    "lint:fix": "eslint --config eslint.config.js src/ server.js --fix"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^0.5.0",
@@ -26,10 +30,13 @@
   },
   "keywords": [
     "shopify",
-    "webhooks",
     "mcp",
+    "model-context-protocol",
+    "abandoned-checkout",
+    "marketing-automation",
+    "ai",
     "chatgpt",
-    "ai"
+    "claude"
   ],
   "author": "Your Name",
   "license": "MIT",
@@ -44,6 +51,16 @@
   "overrides": {
     "vite": {
       "node": "^20.16.0 || >=22.0.0"
+    }
+  },
+  "mcp": {
+    "server": {
+      "command": "node",
+      "args": ["server.js"],
+      "env": {
+        "NODE_ENV": "production",
+        "MCP_MODE": "true"
+      }
     }
   }
 }
