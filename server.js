@@ -1,28 +1,35 @@
 #!/usr/bin/env node
 
 import 'dotenv/config';
+import { createServer } from 'http';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
     CallToolRequestSchema,
-    ErrorCode,
-    ListToolsRequestSchema,
-    McpError
+    ListToolsRequestSchema
 } from '@modelcontextprotocol/sdk/types.js';
 
-import { initializeDatabase } from './db/database.js';
-import { fetchFromShopify } from './src/clients/shopify.js';
 import app from './src/api/index.js';
+import { initializeDatabase } from './db/database.js';
+import {
+    getAbandonedCheckouts,
+    debugEnvVars,
+    getProductCount,
+    updateAbandonmentDeliveryStatus,
+    sendAbandonmentRecoveryOffer,
+    autoProcessAbandonmentRecovery
+} from './src/clients/shopify.js';
+
+const PORT = parseInt(process.env.BACKEND_PORT || process.env.PORT || '3000', 10);
 
 /**
- * MCP Server for Shopify Webhook Management
- * Allows ChatGPT to create, manage, and monitor Shopify webhooks
+ * Unified Shopify MCP Server using the official MCP SDK
  */
-class ShopifyWebhookMCPServer {
+class ShopifyMcpServer {
     constructor() {
         this.server = new Server(
             {
-                name: 'shopify-webhook-mcp',
+                name: 'shopify-mcp-server',
                 version: '1.0.0'
             },
             {
@@ -36,366 +43,268 @@ class ShopifyWebhookMCPServer {
     }
 
     setupToolHandlers() {
-        this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-            tools: [
-                {
-                    name: 'create_webhook_subscription',
-                    description: 'Create a new webhook subscription for a specific topic',
-                    inputSchema: {
-                        type: 'object',
-                        properties: {
-                            topic: {
-                                type: 'string',
-                                description: 'Webhook topic (e.g., ORDERS_CREATE, PRODUCTS_UPDATE)',
-                                enum: [
-                                    'ORDERS_CREATE', 'ORDERS_UPDATE', 'ORDERS_DELETE', 'ORDERS_PAID',
-                                    'PRODUCTS_CREATE', 'PRODUCTS_UPDATE', 'PRODUCTS_DELETE',
-                                    'CUSTOMERS_CREATE', 'CUSTOMERS_UPDATE', 'CUSTOMERS_DELETE',
-                                    'APP_UNINSTALLED', 'APP_SUBSCRIPTIONS_UPDATE'
-                                ]
-                            },
-                            callbackUrl: {
-                                type: 'string',
-                                description: 'HTTPS URL where webhooks will be sent'
-                            },
-                            format: {
-                                type: 'string',
-                                description: 'Response format',
-                                enum: ['JSON', 'XML'],
-                                default: 'JSON'
-                            },
-                            includeFields: {
-                                type: 'array',
-                                items: { type: 'string' },
-                                description: 'Specific fields to include in webhook payload'
-                            }
-                        },
-                        required: ['topic', 'callbackUrl']
-                    }
-                },
-                {
-                    name: 'list_webhook_subscriptions',
-                    description: 'List all current webhook subscriptions',
-                    inputSchema: {
-                        type: 'object',
-                        properties: {
-                            first: {
-                                type: 'number',
-                                description: 'Number of subscriptions to retrieve (max 250)',
-                                default: 10
+        // Tool discovery - list all available tools
+        this.server.setRequestHandler(ListToolsRequestSchema, async () => {
+            return {
+                tools: [
+                    {
+                        name: 'get_abandoned_checkouts',
+                        description: 'Retrieve a list of abandoned checkouts from Shopify',
+                        inputSchema: {
+                            type: 'object',
+                            properties: {
+                                limit: {
+                                    type: 'number',
+                                    description: 'Maximum number of abandoned checkouts to retrieve',
+                                    default: 10
+                                },
+                                days_ago: {
+                                    type: 'number',
+                                    description: 'Number of days ago to start the search',
+                                    default: 7
+                                }
                             }
                         }
-                    }
-                },
-                {
-                    name: 'delete_webhook_subscription',
-                    description: 'Delete a webhook subscription by ID',
-                    inputSchema: {
-                        type: 'object',
-                        properties: {
-                            subscriptionId: {
-                                type: 'string',
-                                description: 'The ID of the webhook subscription to delete'
-                            }
-                        },
-                        required: ['subscriptionId']
-                    }
-                },
-                {
-                    name: 'create_pubsub_webhook',
-                    description: 'Create a Google Cloud Pub/Sub webhook subscription',
-                    inputSchema: {
-                        type: 'object',
-                        properties: {
-                            topic: {
-                                type: 'string',
-                                description: 'Webhook topic'
+                    },
+                    {
+                        name: 'debug_env_vars',
+                        description: 'Debug and verify environment variables configuration',
+                        inputSchema: {
+                            type: 'object',
+                            properties: {}
+                        }
+                    },
+                    {
+                        name: 'get_product_count',
+                        description: 'Get the total count of products in the Shopify store',
+                        inputSchema: {
+                            type: 'object',
+                            properties: {}
+                        }
+                    },
+                    {
+                        name: 'update_abandonment_delivery_status',
+                        description: 'Update the delivery status of an abandoned checkout marketing activity',
+                        inputSchema: {
+                            type: 'object',
+                            properties: {
+                                abandonmentId: {
+                                    type: 'string',
+                                    description: 'The ID of the abandoned checkout',
+                                    required: true
+                                },
+                                marketingActivityId: {
+                                    type: 'string',
+                                    description: 'The ID of the marketing activity',
+                                    required: true
+                                },
+                                deliveryStatus: {
+                                    type: 'string',
+                                    description: 'The delivery status (SENT, DELIVERED, etc.)',
+                                    required: true
+                                },
+                                deliveredAt: {
+                                    type: 'string',
+                                    description: 'ISO timestamp when delivered'
+                                },
+                                deliveryStatusChangeReason: {
+                                    type: 'string',
+                                    description: 'Reason for the status change'
+                                }
                             },
-                            pubSubProject: {
-                                type: 'string',
-                                description: 'Google Cloud Project ID'
+                            required: ['abandonmentId', 'marketingActivityId', 'deliveryStatus']
+                        }
+                    },
+                    {
+                        name: 'send_abandonment_recovery_offer',
+                        description: 'Send a recovery offer for an abandoned checkout',
+                        inputSchema: {
+                            type: 'object',
+                            properties: {
+                                abandonmentId: {
+                                    type: 'string',
+                                    description: 'The ID of the abandoned checkout',
+                                    required: true
+                                },
+                                customerId: {
+                                    type: 'string',
+                                    description: 'The customer ID'
+                                },
+                                customerEmail: {
+                                    type: 'string',
+                                    description: 'The customer email address',
+                                    required: true
+                                },
+                                offerType: {
+                                    type: 'string',
+                                    description: 'Type of offer (discount, free_shipping, etc.)',
+                                    default: 'discount'
+                                },
+                                discountPercent: {
+                                    type: 'string',
+                                    description: 'Discount percentage',
+                                    default: '10'
+                                }
                             },
-                            pubSubTopic: {
-                                type: 'string',
-                                description: 'Pub/Sub topic name'
-                            }
-                        },
-                        required: ['topic', 'pubSubProject', 'pubSubTopic']
+                            required: ['abandonmentId', 'customerEmail']
+                        }
+                    },
+                    {
+                        name: 'auto_process_abandonment_recovery',
+                        description: 'Automatically process abandoned checkout recovery by fetching customer data and sending offer',
+                        inputSchema: {
+                            type: 'object',
+                            properties: {
+                                abandonmentId: {
+                                    type: 'string',
+                                    description: 'The ID of the abandoned checkout',
+                                    required: true
+                                },
+                                offerType: {
+                                    type: 'string',
+                                    description: 'Type of offer (discount, free_shipping, etc.)',
+                                    default: 'discount'
+                                },
+                                discountPercent: {
+                                    type: 'string',
+                                    description: 'Discount percentage',
+                                    default: '10'
+                                }
+                            },
+                            required: ['abandonmentId']
+                        }
                     }
-                },
-                {
-                    name: 'validate_webhook_endpoint',
-                    description: 'Test if a webhook endpoint is reachable and valid',
-                    inputSchema: {
-                        type: 'object',
-                        properties: {
-                            url: {
-                                type: 'string',
-                                description: 'The webhook endpoint URL to validate'
-                            }
-                        },
-                        required: ['url']
-                    }
-                }
-            ]
-        }));
+                ]
+            };
+        });
 
+        // Tool execution handler
         this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const { name, arguments: args } = request.params;
 
             try {
+                let result;
+
                 switch (name) {
-                    case 'create_webhook_subscription':
-                        return await this.createWebhookSubscription(args);
-          
-                    case 'list_webhook_subscriptions':
-                        return await this.listWebhookSubscriptions(args);
-          
-                    case 'delete_webhook_subscription':
-                        return await this.deleteWebhookSubscription(args);
-          
-                    case 'create_pubsub_webhook':
-                        return await this.createPubSubWebhook(args);
-          
-                    case 'validate_webhook_endpoint':
-                        return await this.validateWebhookEndpoint(args);
-          
+                    case 'get_abandoned_checkouts':
+                        result = await getAbandonedCheckouts(args?.limit, args?.days_ago);
+                        break;
+
+                    case 'debug_env_vars':
+                        result = await debugEnvVars();
+                        break;
+
+                    case 'get_product_count':
+                        result = await getProductCount();
+                        break;
+
+                    case 'update_abandonment_delivery_status':
+                        result = await updateAbandonmentDeliveryStatus(args);
+                        break;
+
+                    case 'send_abandonment_recovery_offer':
+                        result = await sendAbandonmentRecoveryOffer(args);
+                        break;
+
+                    case 'auto_process_abandonment_recovery':
+                        result = await autoProcessAbandonmentRecovery(args);
+                        break;
+
                     default:
-                        throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
+                        throw new Error(`Unknown tool: ${name}`);
                 }
+
+                return {
+                    content: [
+                        {
+                            type: 'text',
+                            text: typeof result === 'string' ? result : JSON.stringify(result, null, 2)
+                        }
+                    ]
+                };
+
             } catch (error) {
-                throw new McpError(ErrorCode.InternalError, `Error executing ${name}: ${error.message}`);
+                return {
+                    isError: true,
+                    content: [
+                        {
+                            type: 'text',
+                            text: `Error executing tool "${name}": ${error.message}`
+                        }
+                    ]
+                };
             }
         });
     }
 
-    async createWebhookSubscription(args) {
-        const { topic, callbackUrl, format = 'JSON', includeFields } = args;
-
-        const mutation = `
-      mutation webhookSubscriptionCreate($topic: WebhookSubscriptionTopic!, $webhookSubscription: WebhookSubscriptionInput!) {
-        webhookSubscriptionCreate(topic: $topic, webhookSubscription: $webhookSubscription) {
-          userErrors {
-            field
-            message
-          }
-          webhookSubscription {
-            id
-            callbackUrl
-            topic
-            format
-            includeFields
-            createdAt
-            updatedAt
-          }
-        }
-      }
-    `;
-
-        const variables = {
-            topic,
-            webhookSubscription: {
-                callbackUrl,
-                format,
-                ...(includeFields && { includeFields })
-            }
-        };
-
-        const data = await fetchFromShopify(mutation, variables);
-    
-        if (data.webhookSubscriptionCreate.userErrors.length > 0) {
-            throw new Error(`Webhook creation failed: ${JSON.stringify(data.webhookSubscriptionCreate.userErrors)}`);
-        }
-
-        return {
-            content: [
-                {
-                    type: 'text',
-                    text: `Successfully created webhook subscription:\n${JSON.stringify(data.webhookSubscriptionCreate.webhookSubscription, null, 2)}`
-                }
-            ]
-        };
-    }
-
-    async listWebhookSubscriptions(args) {
-        const { first = 10 } = args;
-
-        const query = `
-      query webhookSubscriptions($first: Int!) {
-        webhookSubscriptions(first: $first) {
-          edges {
-            node {
-              id
-              callbackUrl
-              topic
-              format
-              includeFields
-              createdAt
-              updatedAt
-            }
-          }
-          pageInfo {
-            hasNextPage
-            endCursor
-          }
-        }
-      }
-    `;
-
-        const data = await fetchFromShopify(query, { first });
-    
-        const subscriptions = data.webhookSubscriptions.edges.map(edge => edge.node);
-
-        return {
-            content: [
-                {
-                    type: 'text',
-                    text: `Current webhook subscriptions (${subscriptions.length}):\n${JSON.stringify(subscriptions, null, 2)}`
-                }
-            ]
-        };
-    }
-
-    async deleteWebhookSubscription(args) {
-        const { subscriptionId } = args;
-
-        const mutation = `
-      mutation webhookSubscriptionDelete($id: ID!) {
-        webhookSubscriptionDelete(id: $id) {
-          userErrors {
-            field
-            message
-          }
-          deletedWebhookSubscriptionId
-        }
-      }
-    `;
-
-        const data = await fetchFromShopify(mutation, { id: subscriptionId });
-    
-        if (data.webhookSubscriptionDelete.userErrors.length > 0) {
-            throw new Error(`Webhook deletion failed: ${JSON.stringify(data.webhookSubscriptionDelete.userErrors)}`);
-        }
-
-        return {
-            content: [
-                {
-                    type: 'text',
-                    text: `Successfully deleted webhook subscription: ${data.webhookSubscriptionDelete.deletedWebhookSubscriptionId}`
-                }
-            ]
-        };
-    }
-
-    async createPubSubWebhook(args) {
-        const { topic, pubSubProject, pubSubTopic } = args;
-
-        const mutation = `
-      mutation pubSubWebhookSubscriptionCreate($topic: WebhookSubscriptionTopic!, $webhookSubscription: PubSubWebhookSubscriptionInput!) {
-        pubSubWebhookSubscriptionCreate(topic: $topic, webhookSubscription: $webhookSubscription) {
-          userErrors {
-            field
-            message
-          }
-          webhookSubscription {
-            id
-            callbackUrl
-            topic
-            format
-            createdAt
-          }
-        }
-      }
-    `;
-
-        const variables = {
-            topic,
-            webhookSubscription: {
-                pubSubProject,
-                pubSubTopic
-            }
-        };
-
-        const data = await fetchFromShopify(mutation, variables);
-    
-        if (data.pubSubWebhookSubscriptionCreate.userErrors.length > 0) {
-            throw new Error(`Pub/Sub webhook creation failed: ${JSON.stringify(data.pubSubWebhookSubscriptionCreate.userErrors)}`);
-        }
-
-        return {
-            content: [
-                {
-                    type: 'text',
-                    text: `Successfully created Pub/Sub webhook subscription:\n${JSON.stringify(data.pubSubWebhookSubscriptionCreate.webhookSubscription, null, 2)}`
-                }
-            ]
-        };
-    }
-
-    async validateWebhookEndpoint(args) {
-        const { url } = args;
-
-        try {
-            // Test if the endpoint is reachable
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000);
-      
-            const response = await fetch(url, {
-                method: 'HEAD',
-                signal: controller.signal
-            });
-      
-            clearTimeout(timeoutId);
-
-            const isValid = response.ok;
-            const status = response.status;
-            const headers = Object.fromEntries(response.headers.entries());
-
-            return {
-                content: [
-                    {
-                        type: 'text',
-                        text: `Webhook endpoint validation:\nURL: ${url}\nStatus: ${status}\nValid: ${isValid}\nHeaders: ${JSON.stringify(headers, null, 2)}`
-                    }
-                ]
-            };
-        } catch (error) {
-            return {
-                content: [
-                    {
-                        type: 'text',
-                        text: `Webhook endpoint validation failed:\nURL: ${url}\nError: ${error.message}`
-                    }
-                ]
-            };
-        }
-    }
-
-    async run() {
-        try {
-            await initializeDatabase();
-            console.log('Database initialized successfully.');
-        } catch (error) {
-            console.error('Failed to initialize database:', error);
-            process.exit(1); // Exit if DB initialization fails
-        }
-
-        // Start the express server
-        const PORT = process.env.PORT || 3000;
-        app.listen(PORT, () => {
-            console.log(`Express server running on port ${PORT}`);
-        });
-    
+    async runMcpServer() {
         const transport = new StdioServerTransport();
         await this.server.connect(transport);
-        console.error('Shopify Webhook MCP server running on stdio');
+        console.error('Shopify MCP Server running on stdio');
     }
 }
 
-// Only run if this file is executed directly
-if (import.meta.url === `file://${process.argv[1]}`) {
-    const server = new ShopifyWebhookMCPServer();
-    server.run().catch(console.error);
+/**
+ * Initialize the database and start servers based on mode
+ */
+async function startServers() {
+    try {
+        // Initialize database first
+        await initializeDatabase();
+        console.log('Database initialized successfully.');
+
+        // Check if we should run in MCP mode (stdio)
+        const isMcpMode = process.env.MCP_MODE === 'true' || process.argv.includes('--mcp');
+
+        if (isMcpMode) {
+            console.log('🔗 Starting Shopify MCP Server (stdio mode)...');
+            const mcpServer = new ShopifyMcpServer();
+            await mcpServer.runMcpServer();
+            return; // Don't start HTTP server in MCP mode
+        }
+
+        // Start HTTP server (development/hybrid mode)
+        console.log('🚀 Starting Express HTTP server...');
+        const server = createServer(app);
+
+        server.listen(PORT, () => {
+            console.log(`Express server running on port ${PORT}`);
+            console.log(`📊 API Endpoints:`);
+            console.log(`   - POST /api/mcp (MCP tools via HTTP)`);
+            console.log(`   - GET  /api/products/count`);
+            console.log(`   - POST /api/products`);
+            console.log(`💬 MCP Server: Available via HTTP API`);
+            console.log(`🏪 Shopify Integration: Active`);
+            console.log(`\n💡 To run in pure MCP mode: MCP_MODE=true node server.js`);
+        });
+
+        server.on('error', (error) => {
+            if (error.code === 'EADDRINUSE') {
+                console.error(`❌ Port ${PORT} is already in use`);
+                process.exit(1);
+            }
+            console.error('❌ Server error:', error);
+        });
+
+        // Graceful shutdown
+        process.on('SIGINT', () => {
+            console.log('\n🛑 Gracefully shutting down...');
+            server.close(() => {
+                console.log('✅ Server closed');
+                process.exit(0);
+            });
+        });
+
+    } catch (error) {
+        console.error('❌ Failed to start servers:', error);
+        process.exit(1);
+    }
 }
 
-export default ShopifyWebhookMCPServer;
+// Export the server class for use in other modules
+export { ShopifyMcpServer };
+
+// Run the server if this file is executed directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+    startServers();
+}

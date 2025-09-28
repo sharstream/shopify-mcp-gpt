@@ -1,31 +1,58 @@
 {
   "mcpServers": {
-    "shopify-webhook-mcp": {
+    "shopify-mcp": {
       "command": "node",
       "args": ["server.js"],
       "cwd": "/Users/dperezalvarez/Documents/shopify-chatgpt-mcp",
       "env": {
-        "SHOPIFY_STORE_DOMAIN": "your-store.myshopify.com",
-        "SHOPIFY_ACCESS_TOKEN": "your-admin-api-access-token"
+        "NODE_ENV": "production",
+        "MCP_MODE": "true"
       }
     }
   },
-  "description": "MCP configuration for Shopify webhook management via ChatGPT",
-  "instructions": {
-    "setup": [
-      "1. Replace 'your-store.myshopify.com' with your actual Shopify store domain",
-      "2. Replace 'your-admin-api-access-token' with your actual Admin API access token",
-      "3. Ensure your Shopify app has the required scopes: read_webhooks, write_webhooks",
-      "4. Run 'npm install' to install dependencies",
-      "5. Add this configuration to your AI assistant's MCP settings"
-    ],
-    "usage": [
-      "Ask your AI assistant to:",
-      "- 'Create a webhook for order creation events'",
-      "- 'List all current webhook subscriptions'",
-      "- 'Delete webhook subscription with ID xyz'",
-      "- 'Set up a Pub/Sub webhook for product updates'",
-      "- 'Validate my webhook endpoint at https://myapp.com/webhooks'"
+  "server": {
+    "name": "Shopify MCP Server",
+    "version": "1.0.0",
+    "description": "Advanced MCP Server for Shopify integration with abandoned checkout recovery and marketing automation",
+    "capabilities": {
+      "tools": {
+        "get_abandoned_checkouts": {
+          "description": "Retrieve abandoned checkouts from Shopify",
+          "parameters": ["limit", "days_ago"]
+        },
+        "debug_env_vars": {
+          "description": "Debug environment variables configuration"
+        },
+        "get_product_count": {
+          "description": "Get total product count from Shopify store"
+        },
+        "update_abandonment_delivery_status": {
+          "description": "Update marketing activity delivery status for abandoned checkout",
+          "parameters": ["abandonmentId", "marketingActivityId", "deliveryStatus", "deliveredAt", "deliveryStatusChangeReason"]
+        },
+        "send_abandonment_recovery_offer": {
+          "description": "Send recovery offer for abandoned checkout",
+          "parameters": ["abandonmentId", "customerEmail", "customerId", "offerType", "discountPercent"]
+        },
+        "auto_process_abandonment_recovery": {
+          "description": "Automatically process abandoned checkout recovery",
+          "parameters": ["abandonmentId", "offerType", "discountPercent"]
+        }
+      }
+    }
+  },
+  "usage": {
+    "install": "npm install",
+    "start_http": "npm start",
+    "start_mcp": "npm run mcp-stdio",
+    "test": "npm test",
+    "development": "npm run dev"
+  },
+  "requirements": {
+    "node": ">=22.0.0",
+    "environment": [
+      "SHOPIFY_STORE_URL",
+      "SHOPIFY_ACCESS_TOKEN"
     ]
   }
 }
