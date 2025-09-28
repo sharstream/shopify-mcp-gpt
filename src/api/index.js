@@ -10,11 +10,6 @@ import productCreator from "../../web/product-creator.js";
 import PrivacyWebhookHandlers from "../../web/privacy.js";
 import { handleMcpRequest } from "../mcp/handlers/mcp_handler.js"; // Import our MCP handler
 
-const PORT = parseInt(
-    process.env.BACKEND_PORT || process.env.PORT || "3000",
-    10
-);
-
 const STATIC_PATH =
   process.env.NODE_ENV === "production"
       ? `${process.cwd()}/frontend/dist`
@@ -54,12 +49,12 @@ app.get("/api/products/count", async (_req, res) => {
     });
 
     const countData = await client.request(`
-    query shopifyProductCount {
-      productsCount {
-        count
-      }
-    }
-  `);
+        query shopifyProductCount {
+            productsCount {
+                count
+            }
+        }
+    `);
 
     res.status(200).send({ count: countData.data.productsCount.count });
 });

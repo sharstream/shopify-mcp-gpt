@@ -1,4 +1,11 @@
-import { getAbandonedCheckouts, debugEnvVars, getProductCount, updateAbandonmentDeliveryStatus, sendAbandonmentRecoveryOffer, autoProcessAbandonmentRecovery } from '../../clients/shopify.js';
+import {
+    getAbandonedCheckouts,
+    debugEnvVars,
+    getProductCount,
+    updateAbandonmentDeliveryStatus,
+    sendAbandonmentRecoveryOffer,
+    autoProcessAbandonmentRecovery
+} from '../../clients/shopify.js';
 import { validateToolArgs, getAvailableTools } from '../schemas/tool_schema.js';
 import { formatSuccessResponse, formatErrorResponse } from '../../utils/api_responses.js';
 
@@ -30,7 +37,10 @@ export async function handleMcpRequest(requestBody) {
 
     // Handle tool execution requests
     if (method !== 'tools/call') {
-        return formatErrorResponse('Invalid MCP request. Method must be "tools/call" with a "name" parameter, or "tools/list" for discovery.', id);
+        return formatErrorResponse(
+            'Invalid MCP request. Method must be "tools/call" with "name" parameter, or "tools/list".',
+            id
+        );
     }
   
     if (!params || !params.name) {
@@ -45,7 +55,7 @@ export async function handleMcpRequest(requestBody) {
     }
 
     try {
-    // Validate tool arguments before execution
+        // Validate tool arguments before execution
         validateToolArgs(name, args);
     
         let result;
