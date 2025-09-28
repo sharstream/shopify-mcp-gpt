@@ -49,4 +49,5 @@ echo ""
 
 # Start the MCP server
 echo "🎯 Starting MCP Server..."
+cd ../
 node server.js
