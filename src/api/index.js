@@ -8,7 +8,7 @@ import 'dotenv/config'; // Load .env file
 import shopify from "../../web/shopify.js";
 import productCreator from "../../web/product-creator.js";
 import PrivacyWebhookHandlers from "../../web/privacy.js";
-import { handleMcpRequest } from "../mcp/handlers/mcp_handler.js"; // Import our MCP handler
+import { handleMcpRequest } from "../mcp/adapters/http_adapter.js"; // Unified MCP adapter
 
 const STATIC_PATH =
   process.env.NODE_ENV === "production"
@@ -29,8 +29,8 @@ app.post(
     shopify.processWebhooks({ webhookHandlers: PrivacyWebhookHandlers })
 );
 
-// Our custom MCP endpoint. We place it before the session validation
-// because it will authenticate using the Admin API token, not a user session.
+// Unified MCP endpoint using the new HTTP adapter
+// We place it before the session validation because it authenticates using the Admin API token
 app.post("/api/mcp", express.json(), async (req, res) => {
     const response = await handleMcpRequest(req.body);
     res.status(200).json(response);

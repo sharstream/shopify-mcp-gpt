@@ -5,7 +5,7 @@ import { createServer } from 'http';
 
 import app from './src/api/index.js';
 import { initializeDatabase } from './db/database.js';
-import { ShopifyMcpServer } from './src/mcp/handlers/mcp_server.js';
+import { ShopifyMcpServer } from './src/mcp/adapters/mcp_sdk_adapter.js';
 
 const PORT = parseInt(process.env.BACKEND_PORT || process.env.PORT || '3000', 10);
 
@@ -22,23 +22,23 @@ async function startServers() {
         const isMcpMode = process.env.MCP_MODE === 'true' || process.argv.includes('--mcp');
 
         if (isMcpMode) {
-            console.log('🔗 Starting Shopify MCP Server (stdio mode)...');
+            console.log('🔗 Starting Unified Shopify MCP Server (stdio mode)...');
             const mcpServer = new ShopifyMcpServer();
             await mcpServer.runMcpServer();
             return; // Don't start HTTP server in MCP mode
         }
 
         // Start HTTP server (development/hybrid mode)
-        console.log('🚀 Starting Express HTTP server...');
+        console.log('🚀 Starting Express HTTP server with Unified MCP...');
         const server = createServer(app);
 
         server.listen(PORT, () => {
             console.log(`Express server running on port ${PORT}`);
             console.log(`📊 API Endpoints:`);
-            console.log(`   - POST /api/mcp (MCP tools via HTTP)`);
+            console.log(`   - POST /api/mcp (Unified MCP tools via HTTP)`);
             console.log(`   - GET  /api/products/count`);
             console.log(`   - POST /api/products`);
-            console.log(`💬 MCP Server: Available via HTTP API`);
+            console.log(`💬 MCP Server: Unified architecture active`);
             console.log(`🏪 Shopify Integration: Active`);
             console.log(`\n💡 To run in pure MCP mode: MCP_MODE=true node server.js`);
         });
@@ -66,7 +66,7 @@ async function startServers() {
     }
 }
 
-// Export the server class for use in other modules
+// Export the server class for use in other modules (legacy compatibility)
 export { ShopifyMcpServer };
 
 // Run the server if this file is executed directly
