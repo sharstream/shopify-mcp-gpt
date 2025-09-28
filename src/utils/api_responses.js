@@ -10,14 +10,14 @@
  * @returns {object} The formatted success response object.
  */
 export function formatSuccessResponse(result, id) {
-  return {
-    jsonrpc: '2.0',
-    id,
-    result: {
-      status: 'success',
-      data: result,
-    },
-  };
+    return {
+        jsonrpc: '2.0',
+        id,
+        result: {
+            status: 'success',
+            data: result
+        }
+    };
 }
 
 /**
@@ -27,12 +27,12 @@ export function formatSuccessResponse(result, id) {
  * @returns {object} The formatted error response object.
  */
 export function formatErrorResponse(message, id) {
-  return {
-    jsonrpc: '2.0',
-    id,
-    error: {
-      code: -32603, // Internal error
-      message,
-    },
-  };
+    return {
+        jsonrpc: '2.0',
+        id,
+        error: {
+            code: -32603, // Internal error
+            message
+        }
+    };
 }
