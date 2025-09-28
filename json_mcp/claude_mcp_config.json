@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "shopify-mcp-server": {
+      "command": "node",
+      "args": ["server.js"],
+      "cwd": "/Users/dperezalvarez/Documents/shopify-chatgpt-mcp",
+      "env": {
+        "MCP_MODE": "true"
+      }
+    }
+  }
+}
