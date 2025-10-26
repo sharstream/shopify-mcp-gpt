@@ -1,0 +1,53 @@
+{
+  "name": "Shopify MCP Server",
+  "description": "Advanced MCP Server for Shopify integration with abandoned checkout recovery and marketing automation",
+  "repository": "https://github.com/yourusername/shopify-chatgpt-mcp",
+  "logo": "https://cdn.shopify.com/s/files/1/0070/7032/files/shopify-icon-square.png",
+  "keywords": [
+    "shopify",
+    "mcp",
+    "model-context-protocol",
+    "abandoned-checkout",
+    "marketing-automation",
+    "ai",
+    "claude"
+  ],
+  "buildpacks": [
+    {
+      "url": "heroku/nodejs"
+    }
+  ],
+  "env": {
+    "NODE_ENV": {
+      "description": "Node environment",
+      "value": "production",
+      "required": true
+    },
+    "SHOPIFY_STORE_DOMAIN": {
+      "description": "Your Shopify store domain (e.g., your-store.myshopify.com)",
+      "required": true
+    },
+    "SHOPIFY_ADMIN_ACCESS_TOKEN": {
+      "description": "Your Shopify Admin API access token",
+      "required": true
+    },
+    "MCP_API_KEY": {
+      "description": "API key for authenticating MCP requests",
+      "generator": "secret",
+      "required": true
+    },
+    "PORT": {
+      "description": "Port for the HTTP server (Heroku sets this automatically)",
+      "value": "3000",
+      "required": false
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  },
+  "addons": [],
+  "stack": "heroku-22"
+}

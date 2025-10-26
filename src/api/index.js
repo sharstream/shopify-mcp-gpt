@@ -9,6 +9,9 @@ import shopify from "../../web/shopify.js";
 import productCreator from "../../web/product-creator.js";
 import PrivacyWebhookHandlers from "../../web/privacy.js";
 import { handleMcpRequest } from "../mcp/adapters/http_adapter.js"; // Unified MCP adapter
+import { handleSseRequest } from "../mcp/adapters/sse_adapter.js"; // SSE transport
+import { authenticateMCP, rateLimitMCP } from "../middleware/auth.js";
+import { configureMcpCors, securityHeaders } from "../middleware/cors.js";
 
 const STATIC_PATH =
   process.env.NODE_ENV === "production"
@@ -16,6 +19,10 @@ const STATIC_PATH =
       : `${process.cwd()}/frontend/`;
 
 const app = express();
+
+// Apply global security and CORS middleware
+app.use(securityHeaders);
+app.use(configureMcpCors);
 
 // Set up Shopify authentication and webhook handling
 app.get(shopify.config.auth.path, shopify.auth.begin());
@@ -29,11 +36,87 @@ app.post(
     shopify.processWebhooks({ webhookHandlers: PrivacyWebhookHandlers })
 );
 
-// Unified MCP endpoint using the new HTTP adapter
-// We place it before the session validation because it authenticates using the Admin API token
-app.post("/api/mcp", express.json(), async (req, res) => {
-    const response = await handleMcpRequest(req.body);
-    res.status(200).json(response);
+// ============================================================================
+// MCP ENDPOINTS - Authentication required via Bearer token
+// ============================================================================
+
+// Legacy HTTP/JSON-RPC endpoint (for backward compatibility)
+app.post("/api/mcp", express.json(), rateLimitMCP, authenticateMCP, async (req, res) => {
+    try {
+        const response = await handleMcpRequest(req.body);
+        res.status(200).json(response);
+    } catch (error) {
+        console.error('MCP request error:', error);
+        res.status(500).json({
+            jsonrpc: '2.0',
+            id: req.body.id || null,
+            error: {
+                code: -32603,
+                message: error.message
+            }
+        });
+    }
+});
+
+// SSE endpoint for remote MCP clients (recommended for Heroku)
+app.get("/sse", rateLimitMCP, authenticateMCP, async (req, res) => {
+    try {
+        await handleSseRequest(req, res);
+    } catch (error) {
+        console.error('SSE connection error:', error);
+        if (!res.headersSent) {
+            res.status(500).json({
+                error: {
+                    code: 'sse_error',
+                    message: error.message
+                }
+            });
+        }
+    }
+});
+
+// SSE message endpoint (for posting messages to the SSE connection)
+app.post("/sse/message", express.json(), rateLimitMCP, authenticateMCP, async (req, res) => {
+    try {
+        // The SSE adapter handles message routing
+        res.status(200).json({ success: true });
+    } catch (error) {
+        console.error('SSE message error:', error);
+        res.status(500).json({
+            error: {
+                code: 'message_error',
+                message: error.message
+            }
+        });
+    }
+});
+
+// Health check endpoint (no authentication required)
+app.get("/health", (req, res) => {
+    res.status(200).json({
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        version: '1.0.0',
+        environment: process.env.NODE_ENV || 'development'
+    });
+});
+
+// MCP server info endpoint (no authentication required)
+app.get("/api/mcp/info", (req, res) => {
+    res.status(200).json({
+        name: 'shopify-mcp-server',
+        version: '1.0.0',
+        description: 'Shopify MCP Server with abandoned checkout recovery',
+        capabilities: ['tools'],
+        transports: ['http', 'sse'],
+        endpoints: {
+            http: '/api/mcp',
+            sse: '/sse',
+            health: '/health'
+        },
+        authentication: 'Bearer token required',
+        documentation: 'https://github.com/yourusername/shopify-chatgpt-mcp'
+    });
 });
 
 // If you are adding routes outside of the /api path, remember to

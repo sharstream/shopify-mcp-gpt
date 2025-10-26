@@ -1,0 +1,36 @@
+{
+  "mcpServers": {
+    "shopify-mcp-local": {
+      "comment": "Local stdio connection (development)",
+      "command": "node",
+      "args": ["/absolute/path/to/shopify-chatgpt-mcp/server.js"],
+      "env": {
+        "NODE_ENV": "development",
+        "MCP_MODE": "true",
+        "SHOPIFY_STORE_DOMAIN": "your-store.myshopify.com",
+        "SHOPIFY_ADMIN_ACCESS_TOKEN": "shpat_your_token_here"
+      }
+    },
+    "shopify-mcp-remote-sse": {
+      "comment": "Remote SSE connection (Heroku - recommended)",
+      "url": "https://your-heroku-app.herokuapp.com/sse",
+      "transport": {
+        "type": "sse"
+      },
+      "headers": {
+        "Authorization": "Bearer your_mcp_api_key_here"
+      }
+    },
+    "shopify-mcp-remote-http": {
+      "comment": "Remote HTTP/JSON-RPC connection (Heroku - legacy)",
+      "url": "https://your-heroku-app.herokuapp.com/api/mcp",
+      "transport": {
+        "type": "http"
+      },
+      "headers": {
+        "Authorization": "Bearer your_mcp_api_key_here",
+        "Content-Type": "application/json"
+      }
+    }
+  }
+}

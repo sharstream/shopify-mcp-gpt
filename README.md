@@ -11,10 +11,31 @@ Advanced Model Context Protocol (MCP) server for Shopify integration with abando
 - **Dual Mode Operation**: Run as HTTP server or stdio MCP server
 - **GraphQL Integration**: Full Shopify Admin API GraphQL support
 
-## 🛠️ Installation
+## 🚀 Quick Start - Deploy to Heroku
+
+Want to deploy your MCP server as a remote service? Use our automated deployment script:
+
+```bash
+# Make script executable (if not already)
+chmod +x deploy-heroku.sh
+
+# Run the deployment script
+./deploy-heroku.sh
+```
+
+The script will:
+- Create your Heroku app
+- Generate secure API keys
+- Configure environment variables
+- Deploy your app
+- Provide Claude Code configuration
+
+**📖 For detailed deployment instructions, see [HEROKU_DEPLOYMENT.md](./HEROKU_DEPLOYMENT.md)**
+
+## 🛠️ Local Installation
 
 ### Prerequisites
-- Node.js >= 22.0.0
+- Node.js >= 20.0.0
 - Shopify Partner App with Admin API access
 - Environment variables configured
 
@@ -78,24 +99,29 @@ npm start
 
 ## 🎯 Usage Modes
 
-### 1. HTTP Server Mode (Development)
+### 1. Local Development (Stdio)
+```bash
+npm run mcp-stdio
+# Runs MCP server on stdio for local Claude Code/Desktop
+```
+
+### 2. HTTP Server Mode (Development)
 ```bash
 npm start
 # Server runs on http://localhost:3000
 # MCP tools available at POST /api/mcp
+# Includes SSE endpoint at GET /sse
 ```
 
-### 2. MCP Studio Mode (Production)
+### 3. Remote Deployment (Heroku - Recommended)
 ```bash
-npm run mcp-stdio
-# Runs pure MCP server on stdio for AI assistants
+./deploy-heroku.sh
+# Deploys to Heroku with SSE transport
+# Accessible from anywhere via HTTPS
+# See HEROKU_DEPLOYMENT.md for details
 ```
 
-### 3. Hybrid Mode
-```bash
-MCP_MODE=true npm start
-# Forces MCP-only mode
-```
+**📖 For SSE transport and remote access setup, see [SSE_SETUP.md](./SSE_SETUP.md)**
 
 ## 🔧 MCP Client Configuration
 
