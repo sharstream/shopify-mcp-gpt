@@ -53,18 +53,36 @@ read -p "Enter your Heroku app name (or press Enter for auto-generated): " APP_N
 
 if [ -z "$APP_NAME" ]; then
     echo -e "${BLUE}Creating Heroku app with auto-generated name...${NC}"
-    heroku create
+    # Capture the output and extract app name
+    CREATE_OUTPUT=$(heroku create 2>&1)
+    echo "$CREATE_OUTPUT"
+    HEROKU_APP=$(echo "$CREATE_OUTPUT" | grep -oE "https://[a-z0-9-]+\.herokuapp\.com" | head -n 1 | sed 's/https:\/\///' | sed 's/\.herokuapp\.com//')
 else
     echo -e "${BLUE}Creating Heroku app: $APP_NAME${NC}"
-    heroku create "$APP_NAME"
+    CREATE_OUTPUT=$(heroku create "$APP_NAME" 2>&1)
+    echo "$CREATE_OUTPUT"
+    HEROKU_APP="$APP_NAME"
 fi
 
 echo ""
-echo -e "${GREEN}✅ App created${NC}"
+
+# Verify app name was captured
+if [ -z "$HEROKU_APP" ]; then
+    echo -e "${RED}❌ Failed to capture Heroku app name${NC}"
+    echo -e "${YELLOW}Trying to detect from git remote...${NC}"
+    HEROKU_APP=$(git remote -v | grep heroku | grep fetch | sed 's/.*heroku\.com\///' | sed 's/\.git.*//' | head -n 1)
+fi
+
+if [ -z "$HEROKU_APP" ]; then
+    echo -e "${RED}❌ Could not determine Heroku app name${NC}"
+    echo -e "${YELLOW}Please run: heroku apps${NC}"
+    echo -e "${YELLOW}Then re-run this script${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}✅ App created: $HEROKU_APP${NC}"
 echo ""
 
-# Get Heroku app info
-HEROKU_APP=$(heroku apps:info --json | grep -o '"name":"[^"]*' | cut -d'"' -f4 | head -n 1)
 HEROKU_URL="https://${HEROKU_APP}.herokuapp.com"
 
 echo -e "${BLUE}📝 Your app URL: ${YELLOW}$HEROKU_URL${NC}"
@@ -85,15 +103,36 @@ echo "Enter your Shopify credentials:"
 read -p "Shopify Store Domain (e.g., your-store.myshopify.com): " SHOPIFY_DOMAIN
 read -p "Shopify Admin Access Token: " SHOPIFY_TOKEN
 
+# Validate inputs
+echo ""
+echo "Validating inputs..."
+if [ -z "$SHOPIFY_DOMAIN" ]; then
+    echo -e "${RED}❌ Shopify Store Domain cannot be empty${NC}"
+    exit 1
+fi
+
+if [ -z "$SHOPIFY_TOKEN" ]; then
+    echo -e "${RED}❌ Shopify Admin Access Token cannot be empty${NC}"
+    exit 1
+fi
+
+if [ -z "$HEROKU_APP" ]; then
+    echo -e "${RED}❌ Heroku app name is not set${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}✅ All inputs validated${NC}"
+
 # Set config vars
 echo ""
-echo "Setting Heroku config vars..."
-heroku config:set \
-  NODE_ENV=production \
-  SHOPIFY_STORE_DOMAIN="$SHOPIFY_DOMAIN" \
-  SHOPIFY_ADMIN_ACCESS_TOKEN="$SHOPIFY_TOKEN" \
-  MCP_API_KEY="$MCP_API_KEY" \
-  --app "$HEROKU_APP"
+echo "Setting Heroku config vars for app: ${HEROKU_APP}..."
+echo ""
+
+# Set config vars one by one for better error handling
+heroku config:set NODE_ENV=production --app "$HEROKU_APP" || { echo -e "${RED}Failed to set NODE_ENV${NC}"; exit 1; }
+heroku config:set SHOPIFY_STORE_DOMAIN="$SHOPIFY_DOMAIN" --app "$HEROKU_APP" || { echo -e "${RED}Failed to set SHOPIFY_STORE_DOMAIN${NC}"; exit 1; }
+heroku config:set SHOPIFY_ADMIN_ACCESS_TOKEN="$SHOPIFY_TOKEN" --app "$HEROKU_APP" || { echo -e "${RED}Failed to set SHOPIFY_ADMIN_ACCESS_TOKEN${NC}"; exit 1; }
+heroku config:set MCP_API_KEY="$MCP_API_KEY" --app "$HEROKU_APP" || { echo -e "${RED}Failed to set MCP_API_KEY${NC}"; exit 1; }
 
 echo ""
 echo -e "${GREEN}✅ Environment variables configured${NC}"
