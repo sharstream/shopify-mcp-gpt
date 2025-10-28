@@ -22,11 +22,13 @@
     "@modelcontextprotocol/sdk": "^0.5.0",
     "dotenv": "^17.2.2",
     "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
     "node-fetch": "^3.3.2",
     "sqlite3": "^5.1.7"
   },
   "engines": {
-    "node": ">=22.0.0 || >=22.16.0"
+    "node": ">=20.0.0",
+    "npm": ">=9.0.0"
   },
   "keywords": [
     "shopify",
@@ -56,7 +58,9 @@
   "mcp": {
     "server": {
       "command": "node",
-      "args": ["server.js"],
+      "args": [
+        "server.js"
+      ],
       "env": {
         "NODE_ENV": "production",
         "MCP_MODE": "true"

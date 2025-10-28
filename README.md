@@ -11,10 +11,31 @@ Advanced Model Context Protocol (MCP) server for Shopify integration with abando
 - **Dual Mode Operation**: Run as HTTP server or stdio MCP server
 - **GraphQL Integration**: Full Shopify Admin API GraphQL support
 
-## 🛠️ Installation
+## 🚀 Quick Start - Deploy to Heroku
+
+Want to deploy your MCP server as a remote service? Use our automated deployment script:
+
+```bash
+# Make script executable (if not already)
+chmod +x setup/deploy-heroku.sh
+
+# Run the deployment script
+./setup/deploy-heroku.sh
+```
+
+The script will:
+- Create your Heroku app
+- Generate secure API keys
+- Configure environment variables
+- Deploy your app
+- Provide Claude Code configuration
+
+**📖 For detailed deployment instructions, see [HEROKU_DEPLOYMENT.md](./HEROKU_DEPLOYMENT.md)**
+
+## 🛠️ Local Installation
 
 ### Prerequisites
-- Node.js >= 22.0.0
+- Node.js >= 20.0.0
 - Shopify Partner App with Admin API access
 - Environment variables configured
 
@@ -63,6 +84,144 @@ NODE_ENV=development
 npm start
 ```
 
+## 🔐 Authentication
+
+### Quick Start
+
+Choose your authentication method based on your use case:
+
+| Use Case | Method | Setup Time |
+|----------|--------|-----------|
+| 🧪 **Testing/Development** | Bearer Token | 1 minute |
+| 🚀 **Production** | JWT Tokens | 2 minutes |
+
+### Two Methods, One Goal: Security
+
+**Bearer Token (MCP_API_KEY)** - Simple & Direct
+- ✅ Never expires - always works
+- ✅ One credential to manage
+- ⚠️ Must protect carefully (no expiration)
+
+**JWT Tokens** - Secure & Auto-Expiring
+- ✅ Expires after 15 minutes automatically
+- ✅ Contains client/shop metadata
+- ✅ If stolen, limited damage window
+
+**Why Both?** Defense in depth following OAuth 2.0 patterns:
+- Bearer = Master key (generates JWT tokens)
+- JWT = Temporary passes (for actual operations)
+- If JWT is compromised → only 15 min risk
+- If Bearer is compromised → rotate and wait 15 min for JWTs to expire
+
+---
+
+### Method 1: JWT Tokens (Production)
+
+**Setup (2 minutes):**
+
+```bash
+# 1. Generate secrets
+openssl rand -hex 64  # JWT_SIGNATURE
+openssl rand -hex 32  # MCP_API_KEY
+
+# 2. Add to .env
+JWT_SIGNATURE=your_jwt_signature_here
+MCP_API_KEY=your_api_key_here
+```
+
+**Usage:**
+
+```bash
+# Generate token (valid 15 min)
+curl -X POST http://localhost:3000/api/auth/token \
+  -H "Authorization: Bearer ${MCP_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"clientId":"my-app","shopDomain":"shop.myshopify.com"}'
+
+# Use token for requests
+curl http://localhost:3000/api/mcp \
+  -H "Authorization: MCP ${TOKEN}" \
+  -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
+
+# When expired, refresh
+curl -X POST http://localhost:3000/api/auth/refresh \
+  -H "Authorization: Bearer ${MCP_API_KEY}" \
+  -d '{"clientId":"my-app","shopDomain":"shop.myshopify.com"}'
+```
+
+**Token Expiration:**
+- Default: 15 minutes (customizable: "15m", "1h", "7d", "30d")
+- Auto-checked on every request
+- When expired → 401 error with refresh instructions
+- Check status: `POST /api/auth/introspect`
+
+### Method 2: Bearer Token (Development)
+
+**Setup (1 minute):**
+
+```bash
+# 1. Generate key
+openssl rand -hex 32
+
+# 2. Add to .env
+MCP_API_KEY=your_api_key_here
+```
+
+**Usage:**
+
+```bash
+# Use directly - no token generation needed
+curl http://localhost:3000/api/mcp \
+  -H "Authorization: Bearer ${MCP_API_KEY}" \
+  -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
+```
+
+**Simple but secure:** Never expires, so store carefully.
+
+### Which Method Should I Use?
+
+```
+Development/Testing  → Bearer Token (1 credential, always works)
+Production           → JWT Tokens (auto-expires, more secure)
+Heroku Deployment    → Bootstrap JWT (30-day) → then short-lived JWTs
+```
+
+### Quick Comparison
+
+| Feature | Bearer | JWT |
+|---------|--------|-----|
+| **Setup** | 1 min | 2 min |
+| **Expires** | Never | 15 min |
+| **Refresh** | Not needed | Auto-generate new token |
+| **Security** | Protect carefully | Limited risk window |
+| **Best For** | Dev/Testing | Production |
+
+### Testing
+
+```bash
+npm start                    # Start server
+node test-jwt-auth.js       # Run tests (generates, expires, refreshes token)
+```
+
+### Security Best Practices
+
+**Why Hybrid = More Secure:**
+- If JWT stolen → only 15 min damage window
+- If Bearer stolen → rotate it, wait 15 min for JWTs to expire
+- Defense in depth: two security layers
+
+**Key Management:**
+- ✅ Store in environment variables / secrets manager
+- ✅ Never commit `.env` to git
+- ✅ Rotate Bearer token quarterly
+- ✅ JWT_SIGNATURE: at least 64 bytes (512 bits)
+
+**Production:**
+- ✅ Always use HTTPS
+- ✅ Auto-refresh JWTs at 12-13 min (before 15 min expiry)
+- ✅ Monitor failed auth attempts
+- ✅ Rate limiting enabled (100 req/min default)
+
 ## 📋 Available Tools
 
 ### Core Tools
@@ -78,24 +237,29 @@ npm start
 
 ## 🎯 Usage Modes
 
-### 1. HTTP Server Mode (Development)
+### 1. Local Development (Stdio)
+```bash
+npm run mcp-stdio
+# Runs MCP server on stdio for local Claude Code/Desktop
+```
+
+### 2. HTTP Server Mode (Development)
 ```bash
 npm start
 # Server runs on http://localhost:3000
 # MCP tools available at POST /api/mcp
+# Includes SSE endpoint at GET /sse
 ```
 
-### 2. MCP Studio Mode (Production)
+### 3. Remote Deployment (Heroku - Recommended)
 ```bash
-npm run mcp-stdio
-# Runs pure MCP server on stdio for AI assistants
+./setup/deploy-heroku.sh
+# Deploys to Heroku with SSE transport
+# Accessible from anywhere via HTTPS
+# See HEROKU_DEPLOYMENT.md for details
 ```
 
-### 3. Hybrid Mode
-```bash
-MCP_MODE=true npm start
-# Forces MCP-only mode
-```
+**📖 For SSE transport and remote access setup, see [SSE_SETUP.md](./SSE_SETUP.md)**
 
 ## 🔧 MCP Client Configuration
 
