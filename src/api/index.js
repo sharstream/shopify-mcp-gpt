@@ -10,7 +10,7 @@ import productCreator from "../../web/product-creator.js";
 import PrivacyWebhookHandlers from "../../web/privacy.js";
 import { handleMcpRequest } from "../mcp/adapters/http_adapter.js"; // Unified MCP adapter
 import { handleSseRequest } from "../mcp/adapters/sse_adapter.js"; // SSE transport
-import { authenticateMCP, rateLimitMCP } from "../middleware/auth.js";
+import { authenticateMCP, rateLimitMCP, generateMCPToken, introspectToken } from "../middleware/auth.js";
 import { configureMcpCors, securityHeaders } from "../middleware/cors.js";
 
 const STATIC_PATH =
@@ -76,7 +76,7 @@ app.get("/sse", rateLimitMCP, authenticateMCP, async (req, res) => {
 });
 
 // SSE message endpoint (for posting messages to the SSE connection)
-app.post("/sse/message", express.json(), rateLimitMCP, authenticateMCP, async (req, res) => {
+app.post("/sse/message", express.json(), rateLimitMCP, authenticateMCP, async (_req, res) => {
     try {
         // The SSE adapter handles message routing
         res.status(200).json({ success: true });
@@ -92,7 +92,7 @@ app.post("/sse/message", express.json(), rateLimitMCP, authenticateMCP, async (r
 });
 
 // Health check endpoint (no authentication required)
-app.get("/health", (req, res) => {
+app.get("/health", (_req, res) => {
     res.status(200).json({
         status: 'healthy',
         timestamp: new Date().toISOString(),
@@ -101,8 +101,25 @@ app.get("/health", (req, res) => {
     });
 });
 
+// ============================================================================
+// AUTHENTICATION ENDPOINTS
+// ============================================================================
+
+// JWT Token generation endpoint
+// Protected by MCP_API_KEY - requires Bearer token authentication
+// This allows users to exchange their long-lived API key for short-lived JWT tokens
+app.post("/api/auth/token", express.json(), rateLimitMCP, generateMCPToken);
+
+// JWT Token refresh endpoint (alias for token generation)
+// When a token expires, clients can refresh by generating a new token
+app.post("/api/auth/refresh", express.json(), rateLimitMCP, generateMCPToken);
+
+// Token introspection endpoint - check token validity and expiration
+// No authentication required - the token itself is being validated
+app.post("/api/auth/introspect", express.json(), rateLimitMCP, introspectToken);
+
 // MCP server info endpoint (no authentication required)
-app.get("/api/mcp/info", (req, res) => {
+app.get("/api/mcp/info", (_req, res) => {
     res.status(200).json({
         name: 'shopify-mcp-server',
         version: '1.0.0',
@@ -112,9 +129,17 @@ app.get("/api/mcp/info", (req, res) => {
         endpoints: {
             http: '/api/mcp',
             sse: '/sse',
-            health: '/health'
+            health: '/health',
+            token: '/api/auth/token',
+            refresh: '/api/auth/refresh',
+            introspect: '/api/auth/introspect'
         },
-        authentication: 'Bearer token required',
+        authentication: {
+            methods: ['Bearer API Key', 'JWT (MCP)'],
+            token_generation: '/api/auth/token (requires Bearer API Key)',
+            token_refresh: '/api/auth/refresh (requires Bearer API Key)',
+            token_introspection: '/api/auth/introspect (no auth required)'
+        },
         documentation: 'https://github.com/yourusername/shopify-chatgpt-mcp'
     });
 });

@@ -98,6 +98,11 @@ MCP_API_KEY=$(openssl rand -hex 32)
 echo -e "${GREEN}Generated: $MCP_API_KEY${NC}"
 echo ""
 
+# TODO Validating JSON Web Token everytime the ApiKey expired
+# Creating an ApiKey Criteria for expiration date, minute, clientId, clientSecret, etc.
+# Checking other mechanism to validate ApiKey which is going to use in the future
+# JsonWebToken, JWT => https://www.jwt.io/
+
 # Prompt for Shopify credentials
 echo "Enter your Shopify credentials:"
 read -p "Shopify Store Domain (e.g., your-store.myshopify.com): " SHOPIFY_DOMAIN
